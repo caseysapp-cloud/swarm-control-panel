@@ -7,10 +7,9 @@ import { OutputTab } from "@/components/output-tab"
 import { CostsTab } from "@/components/costs-tab"
 import { type Mission, type MissionType } from "@/lib/swarm-data"
 
-const TABS = ["ACTIVATE", "MISSIONS", "OUTPUT", "COSTS"] as const
+const TABS = ["ACTIVATE", "MISSIONS", "RESULTS", "COSTS"] as const
 type Tab = (typeof TABS)[number]
 
-// Backend API URL — set NEXT_PUBLIC_API_URL in Vercel environment variables
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? ""
 
 export function SwarmPanel() {
@@ -18,11 +17,10 @@ export function SwarmPanel() {
   const [missions, setMissions] = useState<Mission[]>([])
   const [selectedMission, setSelectedMission] = useState<Mission | null>(null)
   const [dailyBudgetUsed, setDailyBudgetUsed] = useState(0)
-  const [apiOnline, setApiOnline] = useState<boolean | null>(null) // null = checking
+  const [apiOnline, setApiOnline] = useState<boolean | null>(null)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const runningMissionIdRef = useRef<string | null>(null)
 
-  // ── Load missions on mount ──────────────────────────────────────────────
   const loadMissions = useCallback(async () => {
     if (!API_URL) return
     try {
@@ -48,7 +46,6 @@ export function SwarmPanel() {
     loadMissions()
   }, [loadMissions])
 
-  // ── Poll running mission ────────────────────────────────────────────────
   const startPolling = useCallback(
     (missionId: string) => {
       runningMissionIdRef.current = missionId
@@ -66,7 +63,6 @@ export function SwarmPanel() {
             pollingRef.current = null
             runningMissionIdRef.current = null
 
-            // Fetch full mission record
             const full = await fetch(`${API_URL}/api/swarm/missions/${missionId}`)
             if (full.ok) {
               const fullMission: Mission = await full.json()
@@ -74,6 +70,7 @@ export function SwarmPanel() {
                 prev.map((m) => (m.id === missionId ? { ...fullMission } : m))
               )
               setSelectedMission(fullMission)
+              setDailyBudgetUsed((prev) => prev + (fullMission.cost ?? 0))
             }
           } else if (status === "error") {
             clearInterval(pollingRef.current!)
@@ -82,7 +79,9 @@ export function SwarmPanel() {
             setMissions((prev) =>
               prev.map((m) => (m.id === missionId ? { ...m, status: "error" } : m))
             )
-            setSelectedMission((prev) => (prev?.id === missionId ? { ...prev, status: "error" } : prev))
+            setSelectedMission((prev) =>
+              prev?.id === missionId ? { ...prev, status: "error" } : prev
+            )
           }
         } catch {
           // Network hiccup — keep polling
@@ -98,22 +97,17 @@ export function SwarmPanel() {
     }
   }, [])
 
-  // ── Mission select ──────────────────────────────────────────────────────
   const handleMissionSelect = useCallback(
     async (mission: Mission) => {
-      // If it's a running mission, select it as-is and let polling update it
       if (mission.status === "running") {
         setSelectedMission(mission)
-        setActiveTab("OUTPUT")
-        if (runningMissionIdRef.current !== mission.id) {
-          startPolling(mission.id)
-        }
+        setActiveTab("RESULTS")
+        if (runningMissionIdRef.current !== mission.id) startPolling(mission.id)
         return
       }
-      // If complete but rawOutputs not loaded yet, fetch full record
       if (!API_URL || Object.keys(mission.rawOutputs ?? {}).length > 0) {
         setSelectedMission(mission)
-        setActiveTab("OUTPUT")
+        setActiveTab("RESULTS")
         return
       }
       try {
@@ -128,16 +122,14 @@ export function SwarmPanel() {
       } catch {
         setSelectedMission(mission)
       }
-      setActiveTab("OUTPUT")
+      setActiveTab("RESULTS")
     },
     [startPolling]
   )
 
-  // ── Launch mission ──────────────────────────────────────────────────────
   const handleLaunch = useCallback(
     async (type: MissionType, topic: string, tier: string) => {
       if (!API_URL) {
-        // API not configured — show placeholder mission
         const placeholder: Mission = {
           id: `swm-offline-${Date.now()}`,
           type,
@@ -151,7 +143,7 @@ export function SwarmPanel() {
         }
         setMissions((prev) => [placeholder, ...prev])
         setSelectedMission(placeholder)
-        setActiveTab("OUTPUT")
+        setActiveTab("RESULTS")
         return
       }
 
@@ -169,7 +161,6 @@ export function SwarmPanel() {
 
         const { mission_id }: { mission_id: string } = await res.json()
 
-        // Create optimistic 'running' mission in UI
         const running: Mission = {
           id: mission_id,
           type,
@@ -184,7 +175,7 @@ export function SwarmPanel() {
 
         setMissions((prev) => [running, ...prev])
         setSelectedMission(running)
-        setActiveTab("OUTPUT")
+        setActiveTab("RESULTS")
         startPolling(mission_id)
       } catch (err) {
         const errorMission: Mission = {
@@ -200,7 +191,7 @@ export function SwarmPanel() {
         }
         setMissions((prev) => [errorMission, ...prev])
         setSelectedMission(errorMission)
-        setActiveTab("OUTPUT")
+        setActiveTab("RESULTS")
       }
     },
     [startPolling]
@@ -209,24 +200,14 @@ export function SwarmPanel() {
   return (
     <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-6 py-8">
       {/* Header */}
-      <header className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">
-            Swarm Control Panel
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Orchestrate parallel AI model runs
-          </p>
-        </div>
-        <div className="flex items-center gap-3 font-mono text-xs text-muted-foreground">
-          {apiOnline === null && <span className="text-muted-foreground">connecting…</span>}
-          {apiOnline === true && <span className="text-green-500">● api online</span>}
-          {apiOnline === false && (
-            <span className="text-yellow-500" title="Set NEXT_PUBLIC_API_URL to connect to backend">
-              ● api offline (mock)
-            </span>
-          )}
-          <span>{missions.length} missions</span>
+      <header className="relative mb-8 flex items-center justify-center">
+        <h1 className="text-xl font-semibold tracking-tight text-foreground">
+          Swarm Control Panel
+        </h1>
+        {/* API status — absolute right corner, unobtrusive */}
+        <div className="absolute right-0 top-1/2 -translate-y-1/2 font-mono text-[10px]">
+          {apiOnline === true && <span className="text-green-500">● online</span>}
+          {apiOnline === false && <span className="text-yellow-500 opacity-60">● offline</span>}
         </div>
       </header>
 
@@ -264,7 +245,7 @@ export function SwarmPanel() {
         {activeTab === "MISSIONS" && (
           <MissionsTab missions={missions} onSelect={handleMissionSelect} />
         )}
-        {activeTab === "OUTPUT" && <OutputTab mission={selectedMission} />}
+        {activeTab === "RESULTS" && <OutputTab mission={selectedMission} />}
         {activeTab === "COSTS" && (
           <CostsTab activeMission={selectedMission} missions={missions} />
         )}

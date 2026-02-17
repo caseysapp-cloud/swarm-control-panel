@@ -7,8 +7,19 @@ interface CostsTabProps {
   missions: Mission[]
 }
 
+function fmtCost(cost: number, status?: string): string {
+  if (status === "running") return "running…"
+  if (cost === 0) return "—"
+  return `$${cost.toFixed(2)}`
+}
+
 export function CostsTab({ activeMission, missions }: CostsTabProps) {
-  const sevenDayTotal = missions.reduce((sum, m) => sum + m.cost, 0)
+  const completedMissions = missions.filter((m) => m.status !== "running" && m.cost > 0)
+  const totalCost = completedMissions.reduce((sum, m) => sum + m.cost, 0)
+
+  // Use activeMission if it has model cost data; otherwise prompt to select one
+  const showBreakdown =
+    activeMission && (activeMission.modelCosts ?? []).length > 0
 
   return (
     <div className="flex flex-col gap-8">
@@ -17,10 +28,14 @@ export function CostsTab({ activeMission, missions }: CostsTabProps) {
         <h3 className="mb-4 text-sm font-medium uppercase tracking-wider text-muted-foreground">
           Selected Run
         </h3>
-        {activeMission ? (
+        {activeMission && activeMission.status === "running" ? (
+          <div className="rounded-lg border border-border bg-card p-6 text-center text-sm text-muted-foreground">
+            Mission running — cost will appear when complete.
+          </div>
+        ) : showBreakdown ? (
           <div className="rounded-lg border border-border bg-card p-4">
             <div className="mb-4 font-mono text-sm text-foreground">
-              Run: {activeMission.id} | Total: ${activeMission.cost.toFixed(2)}
+              {activeMission!.id} — Total: ${activeMission!.cost.toFixed(2)}
             </div>
             <table className="w-full">
               <thead>
@@ -40,7 +55,7 @@ export function CostsTab({ activeMission, missions }: CostsTabProps) {
                 </tr>
               </thead>
               <tbody>
-                {activeMission.modelCosts.map((mc, i) => (
+                {activeMission!.modelCosts.map((mc, i) => (
                   <tr key={i} className="border-b border-border last:border-b-0">
                     <td className="py-2 font-mono text-sm text-foreground">{mc.model}</td>
                     <td className="py-2 text-sm text-muted-foreground">{mc.role}</td>
@@ -48,7 +63,7 @@ export function CostsTab({ activeMission, missions }: CostsTabProps) {
                       {mc.tokens.toLocaleString()}
                     </td>
                     <td className="py-2 text-right font-mono text-sm text-foreground">
-                      ${mc.cost.toFixed(2)}
+                      {fmtCost(mc.cost)}
                     </td>
                   </tr>
                 ))}
@@ -57,7 +72,7 @@ export function CostsTab({ activeMission, missions }: CostsTabProps) {
           </div>
         ) : (
           <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
-            No run selected. View a mission to see cost breakdown.
+            Select a completed mission from the Missions tab to see per-model cost breakdown.
           </div>
         )}
       </section>
@@ -82,7 +97,7 @@ export function CostsTab({ activeMission, missions }: CostsTabProps) {
                     Topic
                   </th>
                   <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Total Cost
+                    Cost
                   </th>
                 </tr>
               </thead>
@@ -103,23 +118,24 @@ export function CostsTab({ activeMission, missions }: CostsTabProps) {
                         {m.type}
                       </span>
                     </td>
-                    <td className="max-w-[300px] truncate px-4 py-2 text-sm text-foreground">
+                    <td className="px-4 py-2 text-sm text-foreground">
                       {m.topic}
                     </td>
                     <td className="px-4 py-2 text-right font-mono text-sm text-foreground">
-                      ${m.cost.toFixed(2)}
+                      {fmtCost(m.cost, m.status)}
                     </td>
                   </tr>
                 ))}
-                {/* 7-day total row */}
-                <tr className="bg-card">
-                  <td colSpan={3} className="px-4 py-3 text-sm font-medium text-foreground">
-                    7-day total
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono text-sm font-medium text-foreground">
-                    ${sevenDayTotal.toFixed(2)}
-                  </td>
-                </tr>
+                {completedMissions.length > 0 && (
+                  <tr className="bg-card">
+                    <td colSpan={3} className="px-4 py-3 text-sm font-medium text-foreground">
+                      Total
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-sm font-medium text-foreground">
+                      ${totalCost.toFixed(2)}
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
