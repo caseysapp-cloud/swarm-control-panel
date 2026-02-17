@@ -13,6 +13,7 @@ export interface Mission {
   topic: string
   date: string
   cost: number
+  status?: string   // "running" | "complete" | "error"
   synthesis: string
   rawOutputs: Record<string, string>
   modelCosts: ModelCost[]
