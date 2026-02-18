@@ -50,7 +50,8 @@ export function ActivateTab({ dailyBudgetUsed, dailyBudgetTotal, onLaunch }: Act
 
   function handleApprove() {
     if (!topic.trim()) return
-    onLaunch(selected === "research" ? "R" : "E", topic.trim(), tier, domain)
+    const launchDomain = selected === "research" ? domain : null
+    onLaunch(selected === "research" ? "R" : "E", topic.trim(), tier, launchDomain)
     handleCancel()
   }
 
