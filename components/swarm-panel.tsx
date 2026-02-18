@@ -128,7 +128,7 @@ export function SwarmPanel() {
   )
 
   const handleLaunch = useCallback(
-    async (type: MissionType, topic: string, tier: string) => {
+    async (type: MissionType, topic: string, tier: string, domain: string | null) => {
       if (!API_URL) {
         const placeholder: Mission = {
           id: `swm-offline-${Date.now()}`,
@@ -151,7 +151,7 @@ export function SwarmPanel() {
         const res = await fetch(`${API_URL}/api/swarm/activate`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type, topic, tier }),
+          body: JSON.stringify({ type, topic, tier, domain }),
         })
 
         if (!res.ok) {
