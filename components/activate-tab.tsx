@@ -5,8 +5,14 @@ import { useState } from "react"
 interface ActivateTabProps {
   dailyBudgetUsed: number
   dailyBudgetTotal: number
-  onLaunch: (type: "R" | "E", topic: string, tier: string) => void
+  onLaunch: (type: "R" | "E", topic: string, tier: string, domain: string | null) => void
 }
+
+const DOMAIN_PACKS = [
+  { key: null, label: "General" },
+  { key: "health_science", label: "Health / Science" },
+  { key: "trading_finance", label: "Trading / Finance" },
+] as const
 
 const researchTiers = [
   { label: "Budget", cost: "~$0.10" },
@@ -23,6 +29,7 @@ export function ActivateTab({ dailyBudgetUsed, dailyBudgetTotal, onLaunch }: Act
   const [selected, setSelected] = useState<"research" | "engineering" | null>(null)
   const [topic, setTopic] = useState("")
   const [tier, setTier] = useState<string>("")
+  const [domain, setDomain] = useState<string | null>(null)
 
   const remaining = dailyBudgetTotal - dailyBudgetUsed
   const budgetColor =
@@ -38,11 +45,13 @@ export function ActivateTab({ dailyBudgetUsed, dailyBudgetTotal, onLaunch }: Act
     setSelected(null)
     setTopic("")
     setTier("")
+    setDomain(null)
   }
 
   function handleApprove() {
     if (!topic.trim()) return
-    onLaunch(selected === "research" ? "R" : "E", topic.trim(), tier)
+    const launchDomain = selected === "research" ? domain : null
+    onLaunch(selected === "research" ? "R" : "E", topic.trim(), tier, launchDomain)
     handleCancel()
   }
 
@@ -123,6 +132,30 @@ export function ActivateTab({ dailyBudgetUsed, dailyBudgetTotal, onLaunch }: Act
               Team is pre-configured for each tier
             </p>
           </div>
+
+          {selected === "research" && (
+            <div>
+              <p className="mb-2 text-sm text-muted-foreground">Domain specialization</p>
+              <div className="flex gap-2">
+                {DOMAIN_PACKS.map((d) => (
+                  <button
+                    key={String(d.key)}
+                    onClick={() => setDomain(d.key)}
+                    className={`rounded-md px-4 py-2 font-mono text-sm transition-colors ${
+                      domain === d.key
+                        ? "bg-primary text-primary-foreground"
+                        : "border border-border bg-background text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Swaps each model&apos;s persona and angle for the selected domain
+              </p>
+            </div>
+          )}
 
           <div className="flex items-center justify-between">
             <div className="flex gap-3">
