@@ -70,7 +70,7 @@ export function ActivateTab({ dailyBudgetUsed, dailyBudgetTotal, onLaunch }: Act
         >
           <span className="text-lg font-medium text-foreground">Research & Discovery</span>
           <span className="text-sm text-muted-foreground">
-            Runs 4 AI models in parallel on a topic
+            Runs 5 AI researchers + live web discovery in parallel
           </span>
         </button>
 

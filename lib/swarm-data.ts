@@ -19,7 +19,7 @@ export interface Mission {
   modelCosts: ModelCost[]
 }
 
-export const MODELS_RESEARCH = ["Claude Sonnet", "GPT-4o", "Gemini Pro", "Groq Llama"]
+export const MODELS_RESEARCH = ["Claude Sonnet", "GPT-4o", "Gemini Flash", "Groq Llama", "OpenClaw"]
 export const MODELS_ENGINEERING = ["Claude Sonnet", "GPT-4o", "Gemini Pro"]
 
 export const SAMPLE_MISSIONS: Mission[] = [
@@ -40,12 +40,15 @@ export const SAMPLE_MISSIONS: Mission[] = [
         "My analysis of the quantum error correction landscape reveals a field in rapid transition. The key developments center around three axes:\n\nPerformance: Below-threshold demonstrations are now reproducible across multiple platforms (superconducting, trapped ion, photonic). This was not the case even 12 months ago.\n\nEfficiency: New code families and encoding strategies are reducing resource requirements. The most notable is the cat qubit approach used in AWS Ocelot, which achieved break-even with dramatically fewer physical qubits.\n\nSpeed: Real-time decoding has moved from theoretical possibility to experimental reality, with latencies now compatible with the coherence times of the best qubits.",
       "Groq Llama":
         "Here's a summary of QEC advances:\n\n- Surface codes are working at scale (Google Willow, 105 qubits, below threshold)\n- Bosonic codes reducing overhead by 10x (AWS Ocelot)\n- Real-time decoding achieved (Microsoft Floquet codes, sub-microsecond)\n- Multiple platforms showing below-threshold performance\n- Fault-tolerant QC timeline moved up by 3-5 years vs 2023 estimates\n\nMain remaining challenges: scaling qubit counts while maintaining coherence, improving classical control systems, reducing cryogenic cooling requirements.",
+      "OpenClaw":
+        "**Live Web Discovery** (DuckDuckGo · 2026-02-17):\n\n- **Google Willow Chip Breaks Quantum Error Correction Barrier**\n  _nature.com_\n  Google's 105-qubit Willow processor demonstrates below-threshold error correction, a key milestone for fault-tolerant quantum computing.\n\n- **AWS Ocelot: Cat Qubit Chip Achieves Break-Even Error Correction**\n  _aws.amazon.com_\n  AWS announces Ocelot chip using bosonic cat qubits with 10x reduction in physical qubit overhead vs surface codes.\n\n- **Microsoft Floquet Codes: Real-Time Decoding Under 1ms**\n  _microsoft.com_\n  Sub-microsecond decoder latency for topological qubit systems, enabling real-time error correction in hardware.",
     },
     modelCosts: [
       { model: "Claude Sonnet", role: "Analyst", tokens: 12400, cost: 0.11 },
       { model: "GPT-4o", role: "Analyst", tokens: 11800, cost: 0.10 },
-      { model: "Gemini Pro", role: "Analyst", tokens: 10200, cost: 0.09 },
-      { model: "Groq Llama", role: "Summarizer", tokens: 8600, cost: 0.08 },
+      { model: "Gemini Flash", role: "Analyst", tokens: 10200, cost: 0.001 },
+      { model: "Groq Llama", role: "Summarizer", tokens: 8600, cost: 0.008 },
+      { model: "OpenClaw", role: "Scout", tokens: 0, cost: 0.00 },
     ],
   },
   {
