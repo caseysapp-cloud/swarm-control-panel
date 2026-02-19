@@ -9,9 +9,11 @@ import {
   type Mission,
   type MissionType,
   type PlanResult,
+  type ProviderKey,
   generatePlan,
   refinePlan,
   approvePlan,
+  activateProvider,
 } from "@/lib/swarm-data"
 
 const TABS = ["ACTIVATE", "MISSIONS", "RESULTS", "COSTS"] as const
@@ -164,6 +166,69 @@ export function SwarmPanel() {
     []
   )
 
+  const handleActivateProvider = useCallback(
+    (provider: Exclude<ProviderKey, "swarm">, topic: string, type: MissionType) => {
+      setDeliveryStatus(null)
+
+      if (!API_URL) {
+        const placeholder: Mission = {
+          id: `swm-offline-${Date.now()}`,
+          type,
+          topic,
+          date: new Date().toISOString().split("T")[0],
+          cost: 0,
+          status: "error",
+          provider,
+          synthesis: "API not configured. Set NEXT_PUBLIC_API_URL in Vercel environment variables.",
+          rawOutputs: {},
+          modelCosts: [],
+        }
+        setMissions((prev) => [placeholder, ...prev])
+        setSelectedMission(placeholder)
+        setActiveTab("RESULTS")
+        return
+      }
+
+      activateProvider(API_URL, provider, topic, type)
+        .then(({ mission_id }) => {
+          const running: Mission = {
+            id: mission_id,
+            type,
+            topic,
+            date: new Date().toISOString().split("T")[0],
+            cost: 0,
+            status: "running",
+            provider,
+            synthesis: "",
+            rawOutputs: {},
+            modelCosts: [],
+          }
+          setMissions((prev) => [running, ...prev])
+          setSelectedMission(running)
+          setActiveTab("RESULTS")
+          startPolling(mission_id)
+        })
+        .catch((err) => {
+          const errorMission: Mission = {
+            id: `swm-error-${Date.now()}`,
+            type,
+            topic,
+            date: new Date().toISOString().split("T")[0],
+            cost: 0,
+            status: "error",
+            provider,
+            synthesis: `Launch failed: ${err instanceof Error ? err.message : String(err)}`,
+            rawOutputs: {},
+            modelCosts: [],
+          }
+          setMissions((prev) => [errorMission, ...prev])
+          setSelectedMission(errorMission)
+          setActiveTab("RESULTS")
+        })
+    },
+    [startPolling]
+  )
+
   const handleApproveAndExecute = useCallback(
     (planId: string, type: MissionType, topic: string, tier: string, domain: string | null) => {
       setDeliveryStatus(null)
@@ -269,6 +334,7 @@ export function SwarmPanel() {
             onGeneratePlan={handleGeneratePlan}
             onRefinePlan={handleRefinePlan}
             onApproveAndExecute={handleApproveAndExecute}
+            onActivateProvider={handleActivateProvider}
           />
         )}
         {activeTab === "MISSIONS" && (
