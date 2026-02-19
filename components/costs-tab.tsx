@@ -1,11 +1,31 @@
 "use client"
 
-import type { Mission } from "@/lib/swarm-data"
+import { useState } from "react"
+import type { Mission, ProviderKey } from "@/lib/swarm-data"
 
 interface CostsTabProps {
   activeMission: Mission | null
   missions: Mission[]
 }
+
+const PROVIDER_LABELS: Record<ProviderKey, string> = {
+  swarm: "Custom",
+  openai: "OpenAI",
+  crewai: "CrewAI",
+  pydantic: "Pydantic",
+  agno: "Agno",
+  langgraph: "LangGraph",
+}
+
+const PROVIDER_FILTER_OPTIONS: Array<{ value: "all" | ProviderKey; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "swarm", label: "Custom" },
+  { value: "openai", label: "OpenAI" },
+  { value: "crewai", label: "CrewAI" },
+  { value: "pydantic", label: "Pydantic" },
+  { value: "agno", label: "Agno" },
+  { value: "langgraph", label: "LangGraph" },
+]
 
 function fmtCost(cost: number, status?: string): string {
   if (status === "running") return "running…"
@@ -14,12 +34,17 @@ function fmtCost(cost: number, status?: string): string {
 }
 
 export function CostsTab({ activeMission, missions }: CostsTabProps) {
-  const completedMissions = missions.filter((m) => m.status !== "running" && m.cost > 0)
+  const [providerFilter, setProviderFilter] = useState<"all" | ProviderKey>("all")
+
+  const filteredMissions =
+    providerFilter === "all"
+      ? missions
+      : missions.filter((m) => (m.provider ?? "swarm") === providerFilter)
+
+  const completedMissions = filteredMissions.filter((m) => m.status !== "running" && m.cost > 0)
   const totalCost = completedMissions.reduce((sum, m) => sum + m.cost, 0)
 
-  // Use activeMission if it has model cost data; otherwise prompt to select one
-  const showBreakdown =
-    activeMission && (activeMission.modelCosts ?? []).length > 0
+  const showBreakdown = activeMission && (activeMission.modelCosts ?? []).length > 0
 
   return (
     <div className="flex flex-col gap-8">
@@ -34,8 +59,15 @@ export function CostsTab({ activeMission, missions }: CostsTabProps) {
           </div>
         ) : showBreakdown ? (
           <div className="rounded-lg border border-border bg-card p-4">
-            <div className="mb-4 font-mono text-sm text-foreground">
-              {activeMission!.id} — Total: ${activeMission!.cost.toFixed(2)}
+            <div className="mb-4 flex items-center gap-3">
+              <span className="font-mono text-sm text-foreground">
+                {activeMission!.id} — Total: ${activeMission!.cost.toFixed(2)}
+              </span>
+              {activeMission!.provider && (
+                <span className="font-mono text-xs text-muted-foreground">
+                  [{PROVIDER_LABELS[(activeMission!.provider as ProviderKey)] ?? activeMission!.provider}]
+                </span>
+              )}
             </div>
             <table className="w-full">
               <thead>
@@ -79,9 +111,28 @@ export function CostsTab({ activeMission, missions }: CostsTabProps) {
 
       {/* Run History */}
       <section>
-        <h3 className="mb-4 text-sm font-medium uppercase tracking-wider text-muted-foreground">
-          Run History
-        </h3>
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+            Run History
+          </h3>
+          {/* Provider filter */}
+          <div className="flex gap-1">
+            {PROVIDER_FILTER_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setProviderFilter(opt.value)}
+                className={`rounded-md px-2 py-1 font-mono text-[11px] transition-colors ${
+                  providerFilter === opt.value
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="overflow-hidden rounded-lg border border-border">
           <div className="max-h-[320px] overflow-auto">
             <table className="w-full">
@@ -94,6 +145,9 @@ export function CostsTab({ activeMission, missions }: CostsTabProps) {
                     Type
                   </th>
                   <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Provider
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
                     Topic
                   </th>
                   <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -102,34 +156,40 @@ export function CostsTab({ activeMission, missions }: CostsTabProps) {
                 </tr>
               </thead>
               <tbody>
-                {missions.map((m) => (
-                  <tr key={m.id} className="border-b border-border last:border-b-0">
-                    <td className="px-4 py-2 font-mono text-sm text-muted-foreground">
-                      {m.date}
-                    </td>
-                    <td className="px-4 py-2">
-                      <span
-                        className={`inline-flex items-center rounded-md px-2 py-0.5 font-mono text-xs font-medium ${
-                          m.type === "R"
-                            ? "bg-primary/10 text-primary"
-                            : "bg-warning/10 text-warning"
-                        }`}
-                      >
-                        {m.type}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 text-sm text-foreground">
-                      {m.topic}
-                    </td>
-                    <td className="px-4 py-2 text-right font-mono text-sm text-foreground">
-                      {fmtCost(m.cost, m.status)}
-                    </td>
-                  </tr>
-                ))}
+                {filteredMissions.map((m) => {
+                  const providerKey = (m.provider ?? "swarm") as ProviderKey
+                  return (
+                    <tr key={m.id} className="border-b border-border last:border-b-0">
+                      <td className="px-4 py-2 font-mono text-sm text-muted-foreground">
+                        {m.date}
+                      </td>
+                      <td className="px-4 py-2">
+                        <span
+                          className={`inline-flex items-center rounded-md px-2 py-0.5 font-mono text-xs font-medium ${
+                            m.type === "R"
+                              ? "bg-primary/10 text-primary"
+                              : "bg-warning/10 text-warning"
+                          }`}
+                        >
+                          {m.type}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
+                        {PROVIDER_LABELS[providerKey] ?? providerKey}
+                      </td>
+                      <td className="px-4 py-2 text-sm text-foreground">
+                        {m.topic}
+                      </td>
+                      <td className="px-4 py-2 text-right font-mono text-sm text-foreground">
+                        {fmtCost(m.cost, m.status)}
+                      </td>
+                    </tr>
+                  )
+                })}
                 {completedMissions.length > 0 && (
                   <tr className="bg-card">
-                    <td colSpan={3} className="px-4 py-3 text-sm font-medium text-foreground">
-                      Total
+                    <td colSpan={4} className="px-4 py-3 text-sm font-medium text-foreground">
+                      Total {providerFilter !== "all" ? `(${PROVIDER_LABELS[providerFilter as ProviderKey]})` : ""}
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-sm font-medium text-foreground">
                       ${totalCost.toFixed(2)}

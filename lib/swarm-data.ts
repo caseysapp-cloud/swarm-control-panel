@@ -122,6 +122,8 @@ export interface ModelCost {
   cost: number
 }
 
+export type ProviderKey = "swarm" | "openai" | "crewai" | "pydantic" | "agno" | "langgraph"
+
 export interface Mission {
   id: string
   type: MissionType
@@ -129,9 +131,30 @@ export interface Mission {
   date: string
   cost: number
   status?: string   // "running" | "complete" | "error"
+  provider?: ProviderKey
   synthesis: string
   rawOutputs: Record<string, string>
   modelCosts: ModelCost[]
+}
+
+// ── Provider activate API call ───────────────────────────────────────────────
+
+export async function activateProvider(
+  apiUrl: string,
+  provider: Exclude<ProviderKey, "swarm">,
+  topic: string,
+  type: MissionType,
+): Promise<{ mission_id: string; status: string; message: string }> {
+  const res = await fetch(`${apiUrl}/api/swarm/${provider}/activate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ topic, type }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Unknown error" }))
+    throw new Error(err.detail ?? `HTTP ${res.status}`)
+  }
+  return res.json()
 }
 
 export const MODELS_RESEARCH = ["Claude Sonnet", "GPT-4o", "Gemini Flash", "Groq Llama", "OpenClaw"]

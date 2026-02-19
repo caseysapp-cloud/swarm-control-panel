@@ -3,21 +3,91 @@
 import { useState } from "react"
 import { PlanReview } from "@/components/plan-review"
 import { PromptNavigator } from "@/components/prompt-navigator"
-import { type PlanResult } from "@/lib/swarm-data"
+import { type MissionType, type PlanResult, type ProviderKey } from "@/lib/swarm-data"
 
 interface ActivateTabProps {
   dailyBudgetUsed: number
   dailyBudgetTotal: number
   apiUrl: string
   onGeneratePlan: (
-    type: "R" | "E",
+    type: MissionType,
     topic: string,
     tier: string,
     domain: string | null,
   ) => Promise<PlanResult>
   onRefinePlan: (planId: string, refinementPrompt: string) => Promise<PlanResult>
-  onApproveAndExecute: (planId: string, type: "R" | "E", topic: string, tier: string, domain: string | null) => void
+  onApproveAndExecute: (
+    planId: string,
+    type: MissionType,
+    topic: string,
+    tier: string,
+    domain: string | null,
+  ) => void
+  onActivateProvider: (
+    provider: Exclude<ProviderKey, "swarm">,
+    topic: string,
+    type: MissionType,
+  ) => void
 }
+
+// ── Provider card definitions ─────────────────────────────────────────────────
+
+type CardDef = {
+  key: ProviderKey
+  name: string
+  description: string
+  researchCost: string
+  engineeringCost: string
+  tag?: string
+}
+
+const PROVIDER_CARDS: CardDef[] = [
+  {
+    key: "swarm",
+    name: "Custom Swarm",
+    description: "6 parallel LLMs + live web",
+    researchCost: "~$0.19",
+    engineeringCost: "~$0.00",
+    tag: "Plan / Approve",
+  },
+  {
+    key: "openai",
+    name: "OpenAI",
+    description: "GPT-4o + web search",
+    researchCost: "~$0.10",
+    engineeringCost: "~$0.15",
+  },
+  {
+    key: "crewai",
+    name: "CrewAI",
+    description: "3-agent sequential crew",
+    researchCost: "~$0.20",
+    engineeringCost: "~$0.25",
+  },
+  {
+    key: "pydantic",
+    name: "Pydantic AI",
+    description: "Type-safe 2-agent pipeline",
+    researchCost: "~$0.10",
+    engineeringCost: "~$0.15",
+  },
+  {
+    key: "agno",
+    name: "Agno",
+    description: "Multi-agent team + tools",
+    researchCost: "~$0.15",
+    engineeringCost: "~$0.20",
+  },
+  {
+    key: "langgraph",
+    name: "LangGraph",
+    description: "Graph-based with QA loop",
+    researchCost: "~$0.18",
+    engineeringCost: "~$0.22",
+  },
+]
+
+// ── Domain packs (Custom Swarm only) ─────────────────────────────────────────
 
 const DOMAIN_PACKS = [
   { key: "general", label: "General Research" },
@@ -36,7 +106,12 @@ const engineeringTiers = [
   { label: "Heavy", cost: "~$6.00" },
 ]
 
-type Step = "input" | "generating" | "review"
+type SwarmStep = "input" | "generating" | "review"
+
+type ActiveCard = {
+  provider: ProviderKey
+  type: MissionType
+}
 
 export function ActivateTab({
   dailyBudgetUsed,
@@ -45,56 +120,80 @@ export function ActivateTab({
   onGeneratePlan,
   onRefinePlan,
   onApproveAndExecute,
+  onActivateProvider,
 }: ActivateTabProps) {
-  const [selected, setSelected] = useState<"research" | "engineering" | null>(null)
+  // Which card + type is expanded
+  const [activeCard, setActiveCard] = useState<ActiveCard | null>(null)
+
+  // Shared topic input across all cards
   const [topic, setTopic] = useState("")
-  const [tier, setTier] = useState<string>("")
+
+  // Custom Swarm specific state
+  const [tier, setTier] = useState("Budget")
   const [domain, setDomain] = useState<string | null>("general")
-  const [step, setStep] = useState<Step>("input")
+  const [swarmStep, setSwarmStep] = useState<SwarmStep>("input")
   const [plan, setPlan] = useState<PlanResult | null>(null)
   const [isRefining, setIsRefining] = useState(false)
   const [isApproving, setIsApproving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [showNavigator, setShowNavigator] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // External provider launch state
+  const [isLaunching, setIsLaunching] = useState(false)
 
   const remaining = dailyBudgetTotal - dailyBudgetUsed
   const budgetColor =
     remaining > 5 ? "text-success" : remaining >= 2 ? "text-warning" : "text-destructive"
 
-  function handleSelect(mode: "research" | "engineering") {
-    setSelected(mode)
+  // ── Card click handlers ───────────────────────────────────────────────────
+
+  function handleCardClick(provider: ProviderKey, type: MissionType) {
+    if (activeCard?.provider === provider && activeCard.type === type) {
+      // Same card + type → collapse
+      handleReset()
+      return
+    }
+    setActiveCard({ provider, type })
     setTopic("")
-    setTier(mode === "research" ? "Budget" : "Standard")
     setError(null)
-    setShowNavigator(mode === "research")
+    setSwarmStep("input")
+    setPlan(null)
+    setIsLaunching(false)
+    if (provider === "swarm") {
+      setTier(type === "R" ? "Budget" : "Standard")
+      setDomain("general")
+      setShowNavigator(type === "R")
+    }
   }
 
-  function handleCancel() {
-    setSelected(null)
+  function handleReset() {
+    setActiveCard(null)
     setTopic("")
-    setTier("")
+    setTier("Budget")
     setDomain("general")
-    setStep("input")
+    setSwarmStep("input")
     setPlan(null)
-    setError(null)
     setIsRefining(false)
     setIsApproving(false)
     setShowNavigator(false)
+    setError(null)
+    setIsLaunching(false)
   }
 
+  // ── Custom Swarm handlers ─────────────────────────────────────────────────
+
   async function handleGeneratePlan() {
-    if (!topic.trim() || !selected) return
+    if (!topic.trim() || !activeCard) return
     setError(null)
-    setStep("generating")
+    setSwarmStep("generating")
     try {
-      const missionType = selected === "research" ? "R" : "E"
-      const launchDomain = selected === "research" ? domain : null
-      const generatedPlan = await onGeneratePlan(missionType, topic.trim(), tier, launchDomain)
-      setPlan(generatedPlan)
-      setStep("review")
+      const launchDomain = activeCard.type === "R" ? domain : null
+      const generated = await onGeneratePlan(activeCard.type, topic.trim(), tier, launchDomain)
+      setPlan(generated)
+      setSwarmStep("review")
     } catch (err) {
-      setError(`Plan generation failed: ${err instanceof Error ? err.message : String(err)}`)
-      setStep("input")
+      setError(`Plan failed: ${err instanceof Error ? err.message : String(err)}`)
+      setSwarmStep("input")
     }
   }
 
@@ -113,35 +212,43 @@ export function ActivateTab({
   }
 
   function handleApproveAndExecute() {
-    if (!plan || !selected) return
+    if (!plan || !activeCard) return
     setIsApproving(true)
-    const missionType = selected === "research" ? "R" : "E"
-    const launchDomain = selected === "research" ? domain : null
-    onApproveAndExecute(plan.id, missionType, topic.trim(), tier, launchDomain)
-    // Parent navigates to RESULTS — reset local state
-    setTimeout(() => {
-      handleCancel()
-    }, 300)
+    const launchDomain = activeCard.type === "R" ? domain : null
+    onApproveAndExecute(plan.id, activeCard.type, topic.trim(), tier, launchDomain)
+    setTimeout(handleReset, 300)
   }
 
-  const tiers = selected === "research" ? researchTiers : engineeringTiers
+  // ── External provider launch ──────────────────────────────────────────────
 
-  // ── Plan Review step ────────────────────────────────────────────────────
-  if (step === "review" && plan) {
+  function handleProviderRun() {
+    if (!topic.trim() || !activeCard || activeCard.provider === "swarm") return
+    setIsLaunching(true)
+    setError(null)
+    onActivateProvider(
+      activeCard.provider as Exclude<ProviderKey, "swarm">,
+      topic.trim(),
+      activeCard.type,
+    )
+    setTimeout(handleReset, 300)
+  }
+
+  // ── Plan review step ──────────────────────────────────────────────────────
+
+  if (swarmStep === "review" && plan && activeCard?.provider === "swarm") {
     return (
       <PlanReview
         plan={plan}
         onRefinePlan={handleRefinePlan}
         onApproveAndExecute={handleApproveAndExecute}
-        onBack={handleCancel}
+        onBack={handleReset}
         isRefining={isRefining}
         isApproving={isApproving}
       />
     )
   }
 
-  // ── Generating spinner ─────────────────────────────────────────────────
-  if (step === "generating") {
+  if (swarmStep === "generating" && activeCard?.provider === "swarm") {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-20">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -153,165 +260,209 @@ export function ActivateTab({
     )
   }
 
-  // ── Input step (default) ───────────────────────────────────────────────
+  // ── Budget display ─────────────────────────────────────────────────────────
+
+  const budgetBar = (
+    <div className="mb-6 flex items-center justify-between rounded-lg border border-border bg-card px-4 py-2">
+      <span className="text-xs text-muted-foreground">Daily budget</span>
+      <span className={`font-mono text-sm ${budgetColor}`}>
+        ${remaining.toFixed(2)} remaining of ${dailyBudgetTotal.toFixed(2)}
+      </span>
+    </div>
+  )
+
+  // ── 6-card 2×3 grid ───────────────────────────────────────────────────────
+
   return (
-    <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-2 gap-4">
-        <button
-          onClick={() => handleSelect("research")}
-          className={`flex flex-col gap-3 rounded-lg border p-6 text-left transition-colors ${
-            selected === "research"
-              ? "border-primary bg-primary/5"
-              : "border-border bg-card hover:border-primary/40"
-          }`}
-        >
-          <span className="text-lg font-medium text-foreground">Research & Discovery</span>
-          <span className="text-sm text-muted-foreground">
-            Runs 5 AI researchers + live web discovery in parallel
-          </span>
-        </button>
+    <div className="flex flex-col gap-4">
+      {budgetBar}
 
-        <button
-          onClick={() => handleSelect("engineering")}
-          className={`flex flex-col gap-3 rounded-lg border p-6 text-left transition-colors ${
-            selected === "engineering"
-              ? "border-primary bg-primary/5"
-              : "border-border bg-card hover:border-primary/40"
-          }`}
-        >
-          <span className="text-lg font-medium text-foreground">Engineering & Build</span>
-          <span className="text-sm text-muted-foreground">
-            Decomposes a spec and builds it with parallel agents
-          </span>
-        </button>
-      </div>
+      <div className="grid grid-cols-3 gap-3">
+        {PROVIDER_CARDS.map((card) => {
+          const isResearchActive = activeCard?.provider === card.key && activeCard.type === "R"
+          const isEngineerActive = activeCard?.provider === card.key && activeCard.type === "E"
+          const isAnyActive = isResearchActive || isEngineerActive
 
-      {selected && (
-        <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-6">
-          <div>
-            <div className="mb-2 flex items-center justify-between">
-              <label htmlFor="topic-input" className="text-sm text-muted-foreground">
-                {selected === "research"
-                  ? "What do you want to research?"
-                  : "Spec path or describe what to build"}
-              </label>
-              {selected === "research" && (
-                <button
-                  onClick={() => setShowNavigator((v) => !v)}
-                  className="text-xs text-primary hover:underline"
-                >
-                  {showNavigator ? "Hide prompts" : "Browse prompts"}
-                </button>
-              )}
-            </div>
-            <input
-              id="topic-input"
-              type="text"
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleGeneratePlan()}
-              placeholder={
-                selected === "research"
-                  ? "e.g. Quantum error correction advances 2025-2026"
-                  : "e.g. ./specs/auth-proxy.md or describe the project"
-              }
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-            />
-            {selected === "research" && showNavigator && (
-              <div className="mt-3">
-                <PromptNavigator
-                  domain={domain}
-                  type="R"
-                  onTopicSelect={(t) => {
-                    setTopic(t)
-                    setShowNavigator(false)
-                  }}
-                  currentTopic={topic}
-                  apiUrl={apiUrl}
-                />
-              </div>
-            )}
-          </div>
+          return (
+            <div key={card.key} className="flex flex-col gap-0">
+              {/* Card */}
+              <div
+                className={`flex flex-col gap-2 rounded-lg border p-4 transition-colors ${
+                  isAnyActive
+                    ? "border-primary bg-primary/5"
+                    : "border-border bg-card"
+                }`}
+              >
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-semibold text-foreground">{card.name}</span>
+                  <span className="text-xs text-muted-foreground">{card.description}</span>
+                  {card.tag && (
+                    <span className="mt-1 w-fit rounded-sm bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] text-primary">
+                      {card.tag}
+                    </span>
+                  )}
+                </div>
 
-          <div>
-            <div className="flex gap-2">
-              {tiers.map((t) => (
-                <button
-                  key={t.label}
-                  onClick={() => setTier(t.label)}
-                  className={`rounded-md px-4 py-2 font-mono text-sm transition-colors ${
-                    tier === t.label
-                      ? "bg-primary text-primary-foreground"
-                      : "border border-border bg-background text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {t.label} {t.cost}
-                </button>
-              ))}
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Team is pre-configured for each tier
-            </p>
-          </div>
-
-          {selected === "research" && (
-            <div>
-              <p className="mb-2 text-sm text-muted-foreground">Domain specialization</p>
-              <div className="flex gap-2">
-                {DOMAIN_PACKS.map((d) => (
+                <div className="flex gap-2 pt-1">
                   <button
-                    key={String(d.key)}
-                    onClick={() => {
-                      setDomain(d.key)
-                      if (!topic.trim()) setShowNavigator(true)
-                    }}
-                    className={`rounded-md px-4 py-2 font-mono text-sm transition-colors ${
-                      domain === d.key
+                    onClick={() => handleCardClick(card.key, "R")}
+                    className={`flex flex-1 items-center justify-between rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+                      isResearchActive
                         ? "bg-primary text-primary-foreground"
-                        : "border border-border bg-background text-muted-foreground hover:text-foreground"
+                        : "border border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
                     }`}
                   >
-                    {d.label}
+                    <span>Research</span>
+                    <span className="font-mono opacity-70">{card.researchCost}</span>
                   </button>
-                ))}
+
+                  <button
+                    onClick={() => handleCardClick(card.key, "E")}
+                    className={`flex flex-1 items-center justify-between rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+                      isEngineerActive
+                        ? "bg-primary text-primary-foreground"
+                        : "border border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                    }`}
+                  >
+                    <span>Engineer</span>
+                    <span className="font-mono opacity-70">{card.engineeringCost}</span>
+                  </button>
+                </div>
               </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Swaps each model&apos;s persona and angle for the selected domain
-              </p>
-            </div>
-          )}
 
-          {error && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              {error}
-            </div>
-          )}
+              {/* Inline expansion — only shows for the active card */}
+              {isAnyActive && (
+                <div className="rounded-b-lg border border-t-0 border-primary/30 bg-card px-4 pb-4 pt-3">
+                  {/* Topic input */}
+                  <div className="mb-3">
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <label className="text-xs text-muted-foreground">
+                        {activeCard.type === "R" ? "What to research" : "What to build or design"}
+                      </label>
+                      {card.key === "swarm" && activeCard.type === "R" && (
+                        <button
+                          onClick={() => setShowNavigator((v) => !v)}
+                          className="text-[11px] text-primary hover:underline"
+                        >
+                          {showNavigator ? "Hide prompts" : "Browse prompts"}
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      value={topic}
+                      onChange={(e) => setTopic(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          if (card.key === "swarm") {
+                            void handleGeneratePlan()
+                          } else {
+                            handleProviderRun()
+                          }
+                        }
+                      }}
+                      placeholder={
+                        activeCard.type === "R"
+                          ? "e.g. Silver futures institutional flow Feb 2026"
+                          : "e.g. Real-time dashboard with WebSocket feeds"
+                      }
+                      autoFocus
+                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
 
-          <div className="flex items-center justify-between">
-            <div className="flex gap-3">
-              <button
-                onClick={handleGeneratePlan}
-                disabled={!topic.trim()}
-                className="rounded-md bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
-              >
-                Generate Plan
-              </button>
-              <button
-                onClick={handleCancel}
-                className="rounded-md px-5 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
+                    {card.key === "swarm" && activeCard.type === "R" && showNavigator && (
+                      <div className="mt-2">
+                        <PromptNavigator
+                          domain={domain}
+                          type="R"
+                          onTopicSelect={(t) => {
+                            setTopic(t)
+                            setShowNavigator(false)
+                          }}
+                          currentTopic={topic}
+                          apiUrl={apiUrl}
+                        />
+                      </div>
+                    )}
+                  </div>
 
-          <div className="border-t border-border pt-3">
-            <span className={`font-mono text-sm ${budgetColor}`}>
-              Daily budget remaining: ${remaining.toFixed(2)} of ${dailyBudgetTotal.toFixed(2)}
-            </span>
-          </div>
-        </div>
-      )}
+                  {/* Custom Swarm: tier + domain selectors */}
+                  {card.key === "swarm" && (
+                    <>
+                      <div className="mb-3 flex gap-2">
+                        {(activeCard.type === "R" ? researchTiers : engineeringTiers).map((t) => (
+                          <button
+                            key={t.label}
+                            onClick={() => setTier(t.label)}
+                            className={`rounded-md px-3 py-1.5 font-mono text-xs transition-colors ${
+                              tier === t.label
+                                ? "bg-primary text-primary-foreground"
+                                : "border border-border bg-background text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            {t.label} {t.cost}
+                          </button>
+                        ))}
+                      </div>
+
+                      {activeCard.type === "R" && (
+                        <div className="mb-3 flex gap-2">
+                          {DOMAIN_PACKS.map((d) => (
+                            <button
+                              key={String(d.key)}
+                              onClick={() => setDomain(d.key)}
+                              className={`rounded-md px-3 py-1.5 font-mono text-xs transition-colors ${
+                                domain === d.key
+                                  ? "bg-primary text-primary-foreground"
+                                  : "border border-border bg-background text-muted-foreground hover:text-foreground"
+                              }`}
+                            >
+                              {d.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {error && (
+                    <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                      {error}
+                    </div>
+                  )}
+
+                  {/* Action buttons */}
+                  <div className="flex gap-2">
+                    {card.key === "swarm" ? (
+                      <button
+                        onClick={() => void handleGeneratePlan()}
+                        disabled={!topic.trim()}
+                        className="rounded-md bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+                      >
+                        Generate Plan →
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleProviderRun}
+                        disabled={!topic.trim() || isLaunching}
+                        className="rounded-md bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+                      >
+                        {isLaunching ? "Launching…" : "Run →"}
+                      </button>
+                    )}
+                    <button
+                      onClick={handleReset}
+                      className="rounded-md px-4 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
