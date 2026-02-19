@@ -101,14 +101,17 @@ export async function suggestTopics(
   apiUrl: string,
   topic: string,
   domain: string | null,
-  type: string,
+  type: MissionType,
 ): Promise<SuggestResponse> {
   const res = await fetch(`${apiUrl}/api/swarm/suggest`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ topic, domain, type }),
   })
-  if (!res.ok) throw new Error(`suggest failed: ${res.status}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Unknown error" }))
+    throw new Error(err.detail ?? `HTTP ${res.status}`)
+  }
   return res.json()
 }
 

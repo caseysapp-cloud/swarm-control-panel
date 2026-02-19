@@ -124,6 +124,7 @@ function SuggestionCard({
 }) {
   return (
     <button
+      type="button"
       onClick={() => onSelect(suggestion.template)}
       className="w-full rounded-md border border-border bg-background p-3 text-left transition-colors hover:border-primary/50 hover:bg-primary/5"
     >
@@ -164,13 +165,21 @@ export function PromptNavigator({
   const categories = getTemplates(domain)
 
   async function handleCheckTopic() {
-    if (!currentTopic?.trim()) return
+    const topicToCheck = currentTopic?.trim()
+    if (!topicToCheck) return
+    if (!apiUrl) {
+      setActiveMode("ai-check")
+      setCheckState("error")
+      setCheckResult(null)
+      setCheckError("API not configured. Set NEXT_PUBLIC_API_URL.")
+      return
+    }
     setActiveMode("ai-check")
     setCheckState("loading")
     setCheckResult(null)
     setCheckError(null)
     try {
-      const result = await suggestTopics(apiUrl, currentTopic, domain, type)
+      const result = await suggestTopics(apiUrl, topicToCheck, domain, type)
       setCheckResult(result)
       setCheckState("done")
     } catch (err) {
@@ -184,6 +193,7 @@ export function PromptNavigator({
       {/* Header tabs */}
       <div className="flex items-center gap-0 border-b border-border">
         <button
+          type="button"
           onClick={() => setActiveMode("templates")}
           className={`px-4 py-2.5 text-xs font-medium transition-colors ${
             activeMode === "templates"
@@ -194,6 +204,7 @@ export function PromptNavigator({
           Browse templates
         </button>
         <button
+          type="button"
           onClick={handleCheckTopic}
           disabled={!currentTopic?.trim() || checkState === "loading"}
           className={`px-4 py-2.5 text-xs font-medium transition-colors disabled:opacity-40 ${
@@ -218,6 +229,7 @@ export function PromptNavigator({
                 <div className="flex flex-col gap-1.5">
                   {cat.templates.map((tmpl, i) => (
                     <button
+                      type="button"
                       key={i}
                       onClick={() => onTopicSelect(tmpl)}
                       className="w-full rounded-md border border-border bg-background px-3 py-2 text-left text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground"

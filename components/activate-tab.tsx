@@ -66,6 +66,7 @@ export function ActivateTab({
     setTopic("")
     setTier(mode === "research" ? "Budget" : "Standard")
     setError(null)
+    setShowNavigator(mode === "research")
   }
 
   function handleCancel() {
@@ -216,7 +217,7 @@ export function ActivateTab({
               }
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             />
-            {selected === "research" && (showNavigator || (!topic.trim() && domain)) && (
+            {selected === "research" && showNavigator && (
               <div className="mt-3">
                 <PromptNavigator
                   domain={domain}
@@ -260,7 +261,10 @@ export function ActivateTab({
                 {DOMAIN_PACKS.map((d) => (
                   <button
                     key={String(d.key)}
-                    onClick={() => setDomain(d.key)}
+                    onClick={() => {
+                      setDomain(d.key)
+                      if (!topic.trim()) setShowNavigator(true)
+                    }}
                     className={`rounded-md px-4 py-2 font-mono text-sm transition-colors ${
                       domain === d.key
                         ? "bg-primary text-primary-foreground"
