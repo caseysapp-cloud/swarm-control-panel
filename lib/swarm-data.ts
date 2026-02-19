@@ -1,5 +1,120 @@
 export type MissionType = "R" | "E"
 
+// ── Suggest types ───────────────────────────────────────────────────────────
+
+export interface SuggestionItem {
+  title: string
+  description: string
+  why_better: string
+  template: string
+}
+
+export interface SuggestResponse {
+  quality: "good" | "vague" | "too_broad"
+  issues: string[]
+  suggestions: SuggestionItem[]
+}
+
+// ── Plan types ─────────────────────────────────────────────────────────────
+
+export interface AgentAssignment {
+  agent: string
+  role: string
+  focus: string
+  avoid?: string
+  rationale: string
+}
+
+export interface PlanResult {
+  id: string
+  type: MissionType
+  topic: string
+  domain: string | null
+  tier: string
+  outcome: string
+  goals: string[]
+  agent_assignments: AgentAssignment[]
+  budget_estimate: number
+  estimated_time_sec: number
+  status: "pending" | "approved"
+  created_at: string
+  approved_at: string | null
+  mission_id: string | null
+}
+
+// ── Plan API calls ─────────────────────────────────────────────────────────
+
+export async function generatePlan(
+  apiUrl: string,
+  type: MissionType,
+  topic: string,
+  tier: string,
+  domain: string | null,
+): Promise<PlanResult> {
+  const res = await fetch(`${apiUrl}/api/swarm/plan`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type, topic, tier, domain }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Unknown error" }))
+    throw new Error(err.detail ?? `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function refinePlan(
+  apiUrl: string,
+  planId: string,
+  refinementPrompt: string,
+): Promise<PlanResult> {
+  const res = await fetch(`${apiUrl}/api/swarm/plan/${planId}/refine`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refinement_prompt: refinementPrompt }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Unknown error" }))
+    throw new Error(err.detail ?? `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function approvePlan(
+  apiUrl: string,
+  planId: string,
+): Promise<{ mission_id: string; plan_id: string; status: string; message: string }> {
+  const res = await fetch(`${apiUrl}/api/swarm/plan/${planId}/approve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Unknown error" }))
+    throw new Error(err.detail ?? `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+// ── Suggest API call ────────────────────────────────────────────────────────
+
+export async function suggestTopics(
+  apiUrl: string,
+  topic: string,
+  domain: string | null,
+  type: MissionType,
+): Promise<SuggestResponse> {
+  const res = await fetch(`${apiUrl}/api/swarm/suggest`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ topic, domain, type }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Unknown error" }))
+    throw new Error(err.detail ?? `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
 export interface ModelCost {
   model: string
   role: string

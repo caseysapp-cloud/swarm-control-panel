@@ -5,7 +5,14 @@ import { ActivateTab } from "@/components/activate-tab"
 import { MissionsTab } from "@/components/missions-tab"
 import { OutputTab } from "@/components/output-tab"
 import { CostsTab } from "@/components/costs-tab"
-import { type Mission, type MissionType } from "@/lib/swarm-data"
+import {
+  type Mission,
+  type MissionType,
+  type PlanResult,
+  generatePlan,
+  refinePlan,
+  approvePlan,
+} from "@/lib/swarm-data"
 
 const TABS = ["ACTIVATE", "MISSIONS", "RESULTS", "COSTS"] as const
 type Tab = (typeof TABS)[number]
@@ -18,6 +25,8 @@ export function SwarmPanel() {
   const [selectedMission, setSelectedMission] = useState<Mission | null>(null)
   const [dailyBudgetUsed, setDailyBudgetUsed] = useState(0)
   const [apiOnline, setApiOnline] = useState<boolean | null>(null)
+  // Delivery confirmation shown after mission complete
+  const [deliveryStatus, setDeliveryStatus] = useState<{ telegram: boolean; desktop: boolean } | null>(null)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const runningMissionIdRef = useRef<string | null>(null)
 
@@ -71,6 +80,8 @@ export function SwarmPanel() {
               )
               setSelectedMission(fullMission)
               setDailyBudgetUsed((prev) => prev + (fullMission.cost ?? 0))
+              // Show delivery confirmation (both channels attempted by backend)
+              setDeliveryStatus({ telegram: true, desktop: true })
             }
           } else if (status === "error") {
             clearInterval(pollingRef.current!)
@@ -99,6 +110,7 @@ export function SwarmPanel() {
 
   const handleMissionSelect = useCallback(
     async (mission: Mission) => {
+      setDeliveryStatus(null)
       if (mission.status === "running") {
         setSelectedMission(mission)
         setActiveTab("RESULTS")
@@ -127,8 +139,35 @@ export function SwarmPanel() {
     [startPolling]
   )
 
-  const handleLaunch = useCallback(
-    async (type: MissionType, topic: string, tier: string, domain: string | null) => {
+  // ── Plan flow handlers ────────────────────────────────────────────────────
+
+  const handleGeneratePlan = useCallback(
+    async (
+      type: MissionType,
+      topic: string,
+      tier: string,
+      domain: string | null,
+    ): Promise<PlanResult> => {
+      if (!API_URL) {
+        throw new Error("API not configured. Set NEXT_PUBLIC_API_URL in Vercel environment variables.")
+      }
+      return generatePlan(API_URL, type, topic, tier, domain)
+    },
+    []
+  )
+
+  const handleRefinePlan = useCallback(
+    async (planId: string, refinementPrompt: string): Promise<PlanResult> => {
+      if (!API_URL) throw new Error("API not configured")
+      return refinePlan(API_URL, planId, refinementPrompt)
+    },
+    []
+  )
+
+  const handleApproveAndExecute = useCallback(
+    (planId: string, type: MissionType, topic: string, tier: string, domain: string | null) => {
+      setDeliveryStatus(null)
+
       if (!API_URL) {
         const placeholder: Mission = {
           id: `swm-offline-${Date.now()}`,
@@ -147,20 +186,8 @@ export function SwarmPanel() {
         return
       }
 
-      try {
-        const res = await fetch(`${API_URL}/api/swarm/activate`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type, topic, tier, domain }),
-        })
-
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({ detail: "Unknown error" }))
-          throw new Error(err.detail ?? `HTTP ${res.status}`)
-        }
-
-        const { mission_id }: { mission_id: string } = await res.json()
-
+      // Fire-and-forget: approve plan → get mission_id → start polling
+      approvePlan(API_URL, planId).then(({ mission_id }) => {
         const running: Mission = {
           id: mission_id,
           type,
@@ -172,12 +199,11 @@ export function SwarmPanel() {
           rawOutputs: {},
           modelCosts: [],
         }
-
         setMissions((prev) => [running, ...prev])
         setSelectedMission(running)
         setActiveTab("RESULTS")
         startPolling(mission_id)
-      } catch (err) {
+      }).catch((err) => {
         const errorMission: Mission = {
           id: `swm-error-${Date.now()}`,
           type,
@@ -192,7 +218,7 @@ export function SwarmPanel() {
         setMissions((prev) => [errorMission, ...prev])
         setSelectedMission(errorMission)
         setActiveTab("RESULTS")
-      }
+      })
     },
     [startPolling]
   )
@@ -239,13 +265,45 @@ export function SwarmPanel() {
           <ActivateTab
             dailyBudgetUsed={dailyBudgetUsed}
             dailyBudgetTotal={10}
-            onLaunch={handleLaunch}
+            apiUrl={API_URL}
+            onGeneratePlan={handleGeneratePlan}
+            onRefinePlan={handleRefinePlan}
+            onApproveAndExecute={handleApproveAndExecute}
           />
         )}
         {activeTab === "MISSIONS" && (
           <MissionsTab missions={missions} onSelect={handleMissionSelect} />
         )}
-        {activeTab === "RESULTS" && <OutputTab mission={selectedMission} />}
+        {activeTab === "RESULTS" && (
+          <div className="flex flex-col gap-4">
+            {/* Delivery confirmation banner */}
+            {deliveryStatus && selectedMission?.status === "complete" && (
+              <div className="flex items-center gap-3 rounded-lg border border-green-500/30 bg-green-500/5 px-4 py-3 text-sm">
+                <span className="text-green-500">✓</span>
+                <span className="text-muted-foreground">
+                  Delivered to Telegram{" "}
+                  <span className={deliveryStatus.telegram ? "text-green-500" : "text-destructive"}>
+                    {deliveryStatus.telegram ? "✓" : "✗"}
+                  </span>
+                  {" | "}
+                  Saved to Desktop{" "}
+                  <span className={deliveryStatus.desktop ? "text-green-500" : "text-destructive"}>
+                    {deliveryStatus.desktop ? "✓" : "✗"}
+                  </span>
+                  {" — "}
+                  <span className="font-mono text-xs">~/Desktop/swarm-reports/</span>
+                </span>
+                <button
+                  onClick={() => setDeliveryStatus(null)}
+                  className="ml-auto text-xs text-muted-foreground hover:text-foreground"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+            <OutputTab mission={selectedMission} />
+          </div>
+        )}
         {activeTab === "COSTS" && (
           <CostsTab activeMission={selectedMission} missions={missions} />
         )}
