@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react"
 import { ActivateTab } from "@/components/activate-tab"
+import { CompareTab } from "@/components/compare-tab"
 import { MissionsTab } from "@/components/missions-tab"
 import { OutputTab } from "@/components/output-tab"
 import { CostsTab } from "@/components/costs-tab"
@@ -16,7 +17,7 @@ import {
   activateProvider,
 } from "@/lib/swarm-data"
 
-const TABS = ["ACTIVATE", "MISSIONS", "RESULTS", "COSTS"] as const
+const TABS = ["ACTIVATE", "COMPARE", "MISSIONS", "RESULTS", "COSTS"] as const
 type Tab = (typeof TABS)[number]
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? ""
@@ -167,7 +168,7 @@ export function SwarmPanel() {
   )
 
   const handleActivateProvider = useCallback(
-    (provider: Exclude<ProviderKey, "swarm">, topic: string, type: MissionType) => {
+    (provider: Exclude<ProviderKey, "swarm">, topic: string, type: MissionType, variation?: string) => {
       setDeliveryStatus(null)
 
       if (!API_URL) {
@@ -189,7 +190,7 @@ export function SwarmPanel() {
         return
       }
 
-      activateProvider(API_URL, provider, topic, type)
+      activateProvider(API_URL, provider, topic, type, variation)
         .then(({ mission_id }) => {
           const running: Mission = {
             id: mission_id,
@@ -336,6 +337,9 @@ export function SwarmPanel() {
             onApproveAndExecute={handleApproveAndExecute}
             onActivateProvider={handleActivateProvider}
           />
+        )}
+        {activeTab === "COMPARE" && (
+          <CompareTab apiUrl={API_URL} />
         )}
         {activeTab === "MISSIONS" && (
           <MissionsTab missions={missions} onSelect={handleMissionSelect} />
