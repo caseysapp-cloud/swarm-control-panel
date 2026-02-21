@@ -1,9 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { PlanReview } from "@/components/plan-review"
 import { PromptNavigator } from "@/components/prompt-navigator"
-import { type MissionType, type PlanResult, type ProviderKey } from "@/lib/swarm-data"
+import { type MissionType, type PlanResult, type ProviderKey, listVariations } from "@/lib/swarm-data"
 
 interface ActivateTabProps {
   dailyBudgetUsed: number
@@ -27,6 +27,7 @@ interface ActivateTabProps {
     provider: Exclude<ProviderKey, "swarm">,
     topic: string,
     type: MissionType,
+    variation?: string,
   ) => void
 }
 
@@ -141,6 +142,17 @@ export function ActivateTab({
   // External provider launch state
   const [isLaunching, setIsLaunching] = useState(false)
 
+  // V8: Variation picker state
+  const [variations, setVariations] = useState<string[]>([])
+  const [selectedVariation, setSelectedVariation] = useState<string>("")
+
+  useEffect(() => {
+    if (!apiUrl) return
+    listVariations(apiUrl)
+      .then(setVariations)
+      .catch(() => setVariations([]))
+  }, [apiUrl])
+
   const remaining = dailyBudgetTotal - dailyBudgetUsed
   const budgetColor =
     remaining > 5 ? "text-success" : remaining >= 2 ? "text-warning" : "text-destructive"
@@ -229,6 +241,7 @@ export function ActivateTab({
       activeCard.provider as Exclude<ProviderKey, "swarm">,
       topic.trim(),
       activeCard.type,
+      selectedVariation || undefined,
     )
     setTimeout(handleReset, 300)
   }
@@ -277,7 +290,7 @@ export function ActivateTab({
     <div className="flex flex-col gap-4">
       {budgetBar}
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {PROVIDER_CARDS.map((card) => {
           const isResearchActive = activeCard?.provider === card.key && activeCard.type === "R"
           const isEngineerActive = activeCard?.provider === card.key && activeCard.type === "E"
@@ -287,7 +300,7 @@ export function ActivateTab({
             <div key={card.key} className="flex flex-col gap-0">
               {/* Card */}
               <div
-                className={`flex flex-col gap-2 rounded-lg border p-4 transition-colors ${
+                className={`flex flex-col gap-2 rounded-lg border p-3 transition-colors sm:p-4 ${
                   isAnyActive
                     ? "border-primary bg-primary/5"
                     : "border-border bg-card"
@@ -303,29 +316,29 @@ export function ActivateTab({
                   )}
                 </div>
 
-                <div className="flex gap-2 pt-1">
+                <div className="flex flex-col gap-1.5 pt-1 sm:flex-row sm:gap-2">
                   <button
                     onClick={() => handleCardClick(card.key, "R")}
-                    className={`flex flex-1 items-center justify-between rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+                    className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
                       isResearchActive
                         ? "bg-primary text-primary-foreground"
                         : "border border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
                     }`}
                   >
                     <span>Research</span>
-                    <span className="font-mono opacity-70">{card.researchCost}</span>
+                    <span className="ml-1.5 whitespace-nowrap font-mono opacity-70">{card.researchCost}</span>
                   </button>
 
                   <button
                     onClick={() => handleCardClick(card.key, "E")}
-                    className={`flex flex-1 items-center justify-between rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+                    className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
                       isEngineerActive
                         ? "bg-primary text-primary-foreground"
                         : "border border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
                     }`}
                   >
                     <span>Engineer</span>
-                    <span className="font-mono opacity-70">{card.engineeringCost}</span>
+                    <span className="ml-1.5 whitespace-nowrap font-mono opacity-70">{card.engineeringCost}</span>
                   </button>
                 </div>
               </div>
@@ -423,6 +436,25 @@ export function ActivateTab({
                         </div>
                       )}
                     </>
+                  )}
+
+                  {/* V8: Variation picker (SDK cards only, not Custom Swarm) */}
+                  {card.key !== "swarm" && variations.length > 0 && (
+                    <div className="mb-3">
+                      <label className="mb-1 block text-xs text-muted-foreground">
+                        Config variation (optional)
+                      </label>
+                      <select
+                        value={selectedVariation}
+                        onChange={(e) => setSelectedVariation(e.target.value)}
+                        className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none"
+                      >
+                        <option value="">Default</option>
+                        {variations.map((v) => (
+                          <option key={v} value={v}>{v}</option>
+                        ))}
+                      </select>
+                    </div>
                   )}
 
                   {error && (
