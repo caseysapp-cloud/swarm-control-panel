@@ -122,6 +122,25 @@ export interface ModelCost {
   cost: number
 }
 
+// ── V8: Shared structured output schema ────────────────────────────────────────
+export interface SwarmOutputData {
+  sdk: string
+  mode: string
+  topic: string
+  mission_id: string
+  synthesis: string
+  key_findings: string[]
+  gaps: string[]
+  confidence: "high" | "medium" | "low"
+  sources: string[]
+  quality_score: number
+  quality_dimensions: { completeness: number; specificity: number; accuracy: number }
+  model_costs: ModelCost[]
+  total_cost: number
+  timestamp: string
+  duration_sec: number
+}
+
 export type ProviderKey = "swarm" | "openai" | "crewai" | "pydantic" | "agno" | "langgraph"
 
 export interface Mission {
@@ -135,6 +154,7 @@ export interface Mission {
   synthesis: string
   rawOutputs: Record<string, string>
   modelCosts: ModelCost[]
+  swarmOutput?: SwarmOutputData  // V8: structured output (present after normalizer runs)
 }
 
 // ── Provider activate API call ───────────────────────────────────────────────
@@ -144,17 +164,29 @@ export async function activateProvider(
   provider: Exclude<ProviderKey, "swarm">,
   topic: string,
   type: MissionType,
+  variation?: string,
 ): Promise<{ mission_id: string; status: string; message: string }> {
+  const body: Record<string, unknown> = { topic, type }
+  if (variation) body.variation = variation
   const res = await fetch(`${apiUrl}/api/swarm/${provider}/activate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ topic, type }),
+    body: JSON.stringify(body),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Unknown error" }))
     throw new Error(err.detail ?? `HTTP ${res.status}`)
   }
   return res.json()
+}
+
+// ── Variations API call ──────────────────────────────────────────────────────
+
+export async function listVariations(apiUrl: string): Promise<string[]> {
+  const res = await fetch(`${apiUrl}/api/swarm/variations`)
+  if (!res.ok) return []
+  const data = await res.json()
+  return data.variations ?? []
 }
 
 export const MODELS_RESEARCH = ["Claude Sonnet", "GPT-4o", "Gemini Flash", "Groq Llama", "OpenClaw"]
